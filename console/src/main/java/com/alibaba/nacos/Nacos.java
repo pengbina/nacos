@@ -25,6 +25,20 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * Nacos starter.
  *
  * @author nacos
+ *
+ * nacos服务端的入口
+ *
+ * 首先最外层是一个Map,结构为：Map<String,Map<String,Service>>:
+ *   key:是namespace_id,起到环境隔离的作用。namespace下可以有多个group
+ *   value:又是一个Map<String,Service>,代表分组及组内的服务。一个组内可以有多个服务
+ *      key:代表group分组，不过作为key时格式是group_name:service_name
+ *      value:分组下的某一个服务，例如userservice，用户服务.类型为Service,内部也包含一个Map<String,Cluster>,
+ *      一个服务下可以有多个集群：
+ *          key：集群名称
+ *          value:Cluster类型，包含集群的具体信息。一个集群中可能包含多个实例，也就是具体的节点信息，其中包含一个Set<Instance>,
+ *          就是该集群下的实例的集合
+ *             Instance:实例信息，包含实例的IP，Port，健康状态，权重等信息
+ *  每一个服务去注册到Nacos时，就会把信息组织并存入这个Map中。
  */
 @SpringBootApplication(scanBasePackages = "com.alibaba.nacos")
 @ServletComponentScan
