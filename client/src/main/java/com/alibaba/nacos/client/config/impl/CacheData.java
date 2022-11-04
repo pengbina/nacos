@@ -288,6 +288,7 @@ public class CacheData {
         this.tenant = tenant;
         listeners = new CopyOnWriteArrayList<ManagerListenerWrap>();
         this.isInitializing = true;
+        // 这里会从本地文件系统加载配置内容， failover > snapshot
         this.content = loadCacheContentFromDiskLocal(name, dataId, group, tenant);
         this.md5 = getMd5String(content);
     }

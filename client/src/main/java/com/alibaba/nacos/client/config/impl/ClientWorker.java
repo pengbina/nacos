@@ -121,7 +121,9 @@ public class ClientWorker implements Closeable {
             throws NacosException {
         group = null2defaultGroup(group);
         String tenant = agent.getTenant();
+        // 获取CacheData
         CacheData cache = addCacheDataIfAbsent(dataId, group, tenant);
+        // 给CacheData注册监听器
         for (Listener listener : listeners) {
             cache.addListener(listener);
         }
@@ -396,14 +398,20 @@ public class ClientWorker implements Closeable {
 
     /**
      * Check config info.
+     *
+     * 开启长轮询任务的时机，一般是注册监听之后创建了CacheData，checkConfigInfo定时任务扫描到需要开启新的长轮询任务时，触发长轮询任务提交。
      */
     public void checkConfigInfo() {
+        // cacheMap大小
         // Dispatch taskes.
         int listenerSize = cacheMap.get().size();
+        // cacheMap大小 / 3000 向上取整
         // Round up the longingTaskCount.
         int longingTaskCount = (int) Math.ceil(listenerSize / ParamUtil.getPerTaskConfigSize());
+        // 计算longingTaskCount 大于 当前实际长轮询任务数量
         if (longingTaskCount > currentLongingTaskCount) {
             for (int i = (int) currentLongingTaskCount; i < longingTaskCount; i++) {
+                // 开启新的长轮询任务
                 // The task list is no order.So it maybe has issues when changing.
                 executorService.execute(new LongPollingRunnable(i));
             }
@@ -533,6 +541,15 @@ public class ClientWorker implements Closeable {
         return updateList;
     }
 
+    /**
+     * checkConfigInfo判断当前CacheData数量，是否要开启一个长轮询任务。
+     * 判断依据是，当前长轮询任务数量 < Math.ceil(cacheMap大小 / 3000)，
+     * 则开启一个新的长轮询任务。配置文件不多的情况下，最多也就一个长轮询任务。
+     *
+     * @param agent
+     * @param configFilterChainManager
+     * @param properties
+     */
     @SuppressWarnings("PMD.ThreadPoolCreationRule")
     public ClientWorker(final HttpAgent agent, final ConfigFilterChainManager configFilterChainManager,
             final Properties properties) {
