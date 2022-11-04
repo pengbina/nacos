@@ -596,6 +596,7 @@
         <module>sys</module>
         <module>plugin</module>
         <module>plugin-default-impl</module>
+        <module>springboot-nacos-demo</module>
     </modules>
     
     <!-- Default dependencies in all subprojects -->
