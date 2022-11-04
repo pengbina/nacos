@@ -28,13 +28,16 @@ import java.util.Properties;
  * @author Nacos
  */
 public class ConfigFactory {
-    
+
     /**
      * Create Config.
      *
      * @param properties init param
      * @return ConfigService
      * @throws NacosException Exception
+     *
+     * 为什么要通过反射创建NameConfigService实现类？主要是为了将api层单独拆分出来
+     * ConfigService主要功能包括:配置增删改查/配置监听注册
      */
     public static ConfigService createConfigService(Properties properties) throws NacosException {
         try {
@@ -46,7 +49,7 @@ public class ConfigFactory {
             throw new NacosException(NacosException.CLIENT_INVALID_PARAM, e);
         }
     }
-    
+
     /**
      * Create Config.
      *

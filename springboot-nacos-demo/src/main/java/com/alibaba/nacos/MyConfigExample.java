@@ -10,6 +10,12 @@ import java.util.Scanner;
 
 /**
  * @author DELL
+ *
+ * ConfigServer > Namespace/Tenant > Group > dataId
+ *
+ * Namespace(Tenant):命名空间(租户)，默认命名空间是public,一个命名空间可以包含多个Group,在nacos源码里有些变量是tenant租户，和命名空间是一个东西
+ * Group:组，默认分组是DEFAULT_GROUP，一个组可以包含多个dataId
+ * DataId:数据ID，在nacos中DataId代表一整个配置文件，是配置的最小单位。和apollo不同，apollo的最小单位是一个配置项key。
  */
 public class MyConfigExample {
     public static void main(String[] args) throws NacosException {

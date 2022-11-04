@@ -23,9 +23,15 @@ import com.alibaba.nacos.api.exception.NacosException;
  * Config Service Interface.
  *
  * @author Nacos
+ * <p>
+ * ConfigService是Nacos暴露给客户端的配置服务接口，一个Nacos配置中心+一个Namespace=一个ConfigService实例。
+ *
+ * ConfigService获取配置，是不会走内存缓存的，要么是读取文件系统中的文件，要么是查询nacos-server的实时配置。
  */
 public interface ConfigService {
-    
+
+    //配置增删改查
+
     /**
      * Get config.
      *
@@ -36,7 +42,7 @@ public interface ConfigService {
      * @throws NacosException NacosException
      */
     String getConfig(String dataId, String group, long timeoutMs) throws NacosException;
-    
+
     /**
      * Get config and register Listener.
      *
@@ -53,9 +59,10 @@ public interface ConfigService {
      * @throws NacosException NacosException
      */
     String getConfigAndSignListener(String dataId, String group, long timeoutMs, Listener listener)
-            throws NacosException;
-    
+        throws NacosException;
+
     /**
+     * 注册监听
      * Add a listener to the configuration, after the server modified the configuration, the client will use the
      * incoming listener callback. Recommended asynchronous processing, the application can implement the getExecutor
      * method in the ManagerListener, provide a thread pool of execution. If provided, use the main thread callback, May
@@ -67,7 +74,7 @@ public interface ConfigService {
      * @throws NacosException NacosException
      */
     void addListener(String dataId, String group, Listener listener) throws NacosException;
-    
+
     /**
      * Publish config.
      *
@@ -78,7 +85,7 @@ public interface ConfigService {
      * @throws NacosException NacosException
      */
     boolean publishConfig(String dataId, String group, String content) throws NacosException;
-    
+
     /**
      * Remove config.
      *
@@ -88,7 +95,7 @@ public interface ConfigService {
      * @throws NacosException NacosException
      */
     boolean removeConfig(String dataId, String group) throws NacosException;
-    
+
     /**
      * Remove listener.
      *
@@ -97,15 +104,17 @@ public interface ConfigService {
      * @param listener listener
      */
     void removeListener(String dataId, String group, Listener listener);
-    
+
     /**
+     * NacosConfigServer状态 UP/DOWN
      * Get server status.
      *
      * @return whether health
      */
     String getServerStatus();
-    
+
     /**
+     * 资源关闭
      * Shutdown the resource service.
      *
      * @throws NacosException exception.
