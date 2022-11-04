@@ -71,6 +71,16 @@ import static com.alibaba.nacos.api.common.Constants.WORD_SEPARATOR;
  * ClientWorker构造时会创建两个执行器。
  *      executor：负责检测当前情况（cacheMap大小及当前已经提交的长轮询任务数），是否需要提交新的长轮询任务到executorService中，固定线程数=1。
  *      executorService：负责执行长轮询任务，固定线程数=核数。
+ *
+ *
+ * 长轮询任务分为几个步骤：
+ * 处理failover配置：判断当前CacheData是否使用failover配置（ClientWorker.checkLocalConfig），
+ * 如果使用failover配置，则校验本地配置文件内容是否发生变化，发生变化则触发监听器（CacheData.checkListenerMd5）。这一步其实和长轮询无关。
+ * 对于所有非failover配置，执行长轮询，返回发生改变的groupKey（ClientWorker.checkUpdateDataIds）。
+ * 根据返回的groupKey，查询服务端实时配置并保存snapshot（ClientWorker.getServerConfig）
+ * 更新内存CacheData的配置content。
+ * 校验配置是否发生变更，通知监听器（CacheData.checkListenerMd5）。
+ * 如果正常执行本次长轮询，立即提交长轮询任务，执行下一次长轮询；发生异常，延迟2s提交长轮询任务。
  */
 public class ClientWorker implements Closeable {
 
@@ -624,16 +634,21 @@ public class ClientWorker implements Closeable {
 
         @Override
         public void run() {
-
+            // 当前长轮询任务负责的CacheData集合
             List<CacheData> cacheDatas = new ArrayList<CacheData>();
+            // 正在初始化的CacheData 即刚构建的CacheData，内部的content仍然是snapshot版本
             List<String> inInitializingCacheList = new ArrayList<String>();
             try {
+                //1.对于failover的配置文件的处理
                 // check failover config
                 for (CacheData cacheData : cacheMap.get().values()) {
                     if (cacheData.getTaskId() == taskId) {
                         cacheDatas.add(cacheData);
                         try {
+                            //判断cacheData是否需要使用failover配置，设置isUseLocalConfigInfo
+                            // 如果需要则更新内存中的配置
                             checkLocalConfig(cacheData);
+                            //使用failover配置则检测content内容是否发生变化，如果变化则通知监听器
                             if (cacheData.isUseLocalConfigInfo()) {
                                 cacheData.checkListenerMd5();
                             }
@@ -643,6 +658,7 @@ public class ClientWorker implements Closeable {
                     }
                 }
 
+                //2.对于所有非failover配置，执行长轮询，返回发生改变的groupKey
                 // check server config
                 List<String> changedGroupKeys = checkUpdateDataIds(cacheDatas, inInitializingCacheList);
                 if (!CollectionUtils.isEmpty(changedGroupKeys)) {
@@ -658,7 +674,9 @@ public class ClientWorker implements Closeable {
                         tenant = key[2];
                     }
                     try {
+                        // 3. 对于发生改变的配置，查询实时配置并保存snapshot
                         String[] ct = getServerConfig(dataId, group, tenant, 3000L);
+                        // 4. 更新内存中的配置
                         CacheData cache = cacheMap.get().get(GroupKey.getKeyTenant(dataId, group, tenant));
                         cache.setContent(ct[0]);
                         if (null != ct[1]) {
@@ -674,21 +692,25 @@ public class ClientWorker implements Closeable {
                         LOGGER.error(message, ioe);
                     }
                 }
+                // 5. 对于非failover配置，触发监听器
                 for (CacheData cacheData : cacheDatas) {
+                    // 排除failover文件
                     if (!cacheData.isInitializing() || inInitializingCacheList
                             .contains(GroupKey.getKeyTenant(cacheData.dataId, cacheData.group, cacheData.tenant))) {
+                        // 校验md5是否发生变化，如果发生变化通知listener
                         cacheData.checkListenerMd5();
                         cacheData.setInitializing(false);
                     }
                 }
                 inInitializingCacheList.clear();
-
+                // 6-1. 都执行完成以后，再次提交长轮询任务
                 executorService.execute(this);
 
             } catch (Throwable e) {
 
                 // If the rotation training task is abnormal, the next execution time of the task will be punished
                 LOGGER.error("longPolling error : ", e);
+                // 6-2. 如果长轮询执行发生异常，延迟2s执行下一次长轮询
                 executorService.schedule(this, taskPenaltyTime, TimeUnit.MILLISECONDS);
             }
         }
