@@ -27,6 +27,16 @@ import java.util.Map;
  * Cache item.
  *
  * @author Nacos
+ *
+ * 从整体上Nacos服务端的配置存储分为三层：
+ * 内存：Nacos每个节点都在内存里缓存了配置，但是只包含配置的md5（缓存配置文件太多了），所以内存级别的配置只能用于比较配置是否发生了变更，
+ * 只用于客户端长轮询配置等场景。
+ * 文件系统：文件系统配置来源于数据库写入的配置。如果是集群启动或mysql单机启动，服务端会以本地文件系统的配置响应客户端查询。
+ * 数据库：所有写数据都会先写入数据库。只有当以derby数据源（-DembeddedStorage=true）单机（-Dnacos.standalone=true）启动时，
+ * 客户端的查询配置请求会实时查询derby数据库。
+ *
+ * 对于写请求，Nacos会将数据先更新到数据库，之后异步写入所有节点的文件系统并更新内存。
+ * CacheItem在Nacos服务端对应一个配置文件，缓存了配置的md5，持有一把读写锁控制访问冲突。
  */
 public class CacheItem {
     
@@ -117,11 +127,12 @@ public class CacheItem {
     public void setType(String type) {
         this.type = type;
     }
-    
+
+    // groupKey = namespace + group + dataId
     final String groupKey;
-    
+    // 配置md5
     public volatile String md5 = Constants.NULL;
-    
+    // 更新时间
     public volatile long lastModifiedTs;
     
     /**
@@ -138,9 +149,9 @@ public class CacheItem {
     public volatile Map<String, String> tagMd5;
     
     public volatile Map<String, Long> tagLastModifiedTs;
-    
+    // nacos自己实现的简版读写锁
     public SimpleReadWriteLock rwLock = new SimpleReadWriteLock();
-    
+    // 配置文件类型：text/properties/yaml
     public String type;
     
     public String encryptedDataKey = Constants.NULL;

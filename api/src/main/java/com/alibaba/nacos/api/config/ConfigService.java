@@ -23,6 +23,9 @@ import com.alibaba.nacos.api.exception.NacosException;
  * Config Service Interface.
  *
  * @author Nacos
+ *
+ * ConfigService是Nacos暴露给客户端的配置服务接口，一个Nacos配置中心+一个Namespace=一个ConfigService实例。
+ *
  */
 public interface ConfigService {
     
@@ -65,6 +68,8 @@ public interface ConfigService {
      * @param group    group
      * @param listener listener
      * @throws NacosException NacosException
+     *
+     * 注册监听
      */
     void addListener(String dataId, String group, Listener listener) throws NacosException;
     
@@ -141,6 +146,8 @@ public interface ConfigService {
      * Get server status.
      *
      * @return whether health
+     *
+     * NacosConfigServer状态 UP/DOWN
      */
     String getServerStatus();
     
@@ -148,6 +155,8 @@ public interface ConfigService {
      * Shutdown the resource service.
      *
      * @throws NacosException exception.
+     *
+     * 资源关闭
      */
     void shutDown() throws NacosException;
 }

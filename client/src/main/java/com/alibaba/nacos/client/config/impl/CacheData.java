@@ -45,6 +45,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * Listener Management.
  *
  * @author Nacos
+ *
+ * CacheData是配置文件的抽象，一个groupKey对应一个CacheData。
+ * CacheData上会注册监听器，当CacheData的配置发生变化时，会触发监听器。
  */
 public class CacheData {
     
@@ -68,31 +71,36 @@ public class CacheData {
     
     static final ThreadPoolExecutor INTERNAL_NOTIFIER = new ThreadPoolExecutor(0, CONCURRENCY, 60L, TimeUnit.SECONDS,
             new SynchronousQueue<>(), internalNotifierFactory);
-    
+    // agentName
     private final String name;
-    
+    // 对查询配置的请求和响应提供钩子处理
     private final ConfigFilterChainManager configFilterChainManager;
-    
+
+    // dataId
     public final String dataId;
-    
+    // group
     public final String group;
-    
+    // namespace
     public final String tenant;
-    
+    // 注册在这个配置上的监听器
     private final CopyOnWriteArrayList<ManagerListenerWrap> listeners;
-    
+    // 配置的md5
     private volatile String md5;
     
     /**
      * whether use local config.
+     *
+     * 是否使用failover配置文件
      */
     private volatile boolean isUseLocalConfig = false;
     
     /**
      * last modify time.
+     *
+     * failover配置文件的上次更新时间戳
      */
     private volatile long localConfigLastModified;
-    
+    // 配置
     private volatile String content;
     
     private volatile String encryptedDataKey;
@@ -101,9 +109,9 @@ public class CacheData {
      * local cache change timestamp,for concurrent control.
      */
     private volatile AtomicLong lastModifiedTs = new AtomicLong(0);
-    
+    // 所属长轮询任务ID
     private int taskId;
-    
+    // 是否正在初始化
     private volatile boolean isInitializing = true;
     
     /**
@@ -115,7 +123,7 @@ public class CacheData {
      * if is cache data is discard,need to remove.
      */
     private volatile boolean isDiscard = false;
-    
+    // 配置文件类型 如：TEXT、JSON、YAML
     private String type;
     
     public boolean isInitializing() {
@@ -418,7 +426,8 @@ public class CacheData {
     public CacheData(ConfigFilterChainManager configFilterChainManager, String name, String dataId, String group) {
         this(configFilterChainManager, name, dataId, group, TenantUtil.getUserTenantForAcm());
     }
-    
+
+    // CacheData在构造时会加载本地文件系统的配置内容到content里并计算其md5
     public CacheData(ConfigFilterChainManager configFilterChainManager, String name, String dataId, String group,
             String tenant) {
         if (null == dataId || null == group) {
@@ -431,6 +440,7 @@ public class CacheData {
         this.tenant = tenant;
         this.listeners = new CopyOnWriteArrayList<>();
         this.isInitializing = true;
+        // 这里会从本地文件系统加载配置内容，failover > snapshot
         if (initSnapshot) {
             this.content = loadCacheContentFromDiskLocal(name, dataId, group, tenant);
             this.encryptedDataKey = loadEncryptedDataKeyFromDiskLocal(name, dataId, group, tenant);

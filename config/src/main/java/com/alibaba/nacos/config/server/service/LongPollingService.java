@@ -234,6 +234,15 @@ public class LongPollingService {
      * @param rsp              HttpServletResponse.
      * @param clientMd5Map     clientMd5Map.
      * @param probeRequestSize probeRequestSize.
+     *
+     * LongPollingService的addLongPollingClient方法，处理了实际/v1/cs/configs/listener接口的逻辑，分为这几步：
+     * 确定长轮询实际超时时间：如果isFixedPolling=true（默认false），则设置为10s，无视客户端设置的超时时间；
+     * 否则使用客户端设置的超时时间，默认30s，在这个基础上再减去500ms，防止客户端提前超时。
+     * 比较服务端内存中的配置md5与客户端本次请求的配置md5是否一致：如果有配置项发生变更，则立即拼装请求返回（报文结构见第三部分）。
+     * 这一步保证了客户端长轮询后，查询配置时发生409错误，可以依靠下一次长轮询自动恢复。因为客户端会将配置的当前版本（md5）传过来，由服务端进行比较，如果客户端不传配置md5就做不到了。
+     * 如果当时配置项没有发生变化，且请求头中包含Long-Pulling-Timeout-No-Hangup=true，则立即返回。
+     * 这一步说明本次请求的配置项，包含刚注册监听的配置项。
+     * 如果当时配置项没有发生变化，且不需要立即返回，则开启AsyncContext，将长轮询任务提交到其他线程池，等待其他线程设置AsyncContext.complete()再响应客户端。
      */
     public void addLongPollingClient(HttpServletRequest req, HttpServletResponse rsp, Map<String, String> clientMd5Map,
             int probeRequestSize) {
@@ -242,6 +251,7 @@ public class LongPollingService {
         String noHangUpFlag = req.getHeader(LongPollingService.LONG_POLLING_NO_HANG_UP_HEADER);
         final String appName = req.getHeader(RequestUtil.CLIENT_APPNAME_HEADER);
         final String tag = req.getHeader("Vipserver-Tag");
+        // 确定长轮询实际的超时时间
         int delayTime = SwitchService.getSwitchInteger(SwitchService.FIXED_DELAY_TIME, 500);
         
         // Add delay time for LoadBalance, and one response is returned 500 ms in advance to avoid client timeout.
@@ -251,6 +261,7 @@ public class LongPollingService {
             // Do nothing but set fix polling timeout.
         } else {
             long start = System.currentTimeMillis();
+            // 用内存缓存的md5比较，是否有配置项发生变更，如果有的话立即返回
             List<String> changedGroups = MD5Util.compareMd5(req, rsp, clientMd5Map);
             if (changedGroups.size() > 0) {
                 generateResponse(req, rsp, changedGroups);
@@ -262,17 +273,18 @@ public class LongPollingService {
                 LogUtil.CLIENT_LOG.info("{}|{}|{}|{}|{}|{}|{}", System.currentTimeMillis() - start, "nohangup",
                         RequestUtil.getRemoteIp(req), "polling", clientMd5Map.size(), probeRequestSize,
                         changedGroups.size());
+                // 如果客户端的本次长轮询请求，请求头包含Long-Pulling-Timeout-No-Hangup，则立即返回200
                 return;
             }
         }
         String ip = RequestUtil.getRemoteIp(req);
-        
+        // 开启AsyncContext
         // Must be called by http thread, or send response.
         final AsyncContext asyncContext = req.startAsync();
         
         // AsyncContext.setTimeout() is incorrect, Control by oneself
         asyncContext.setTimeout(0L);
-        
+        // 提交长轮询任务到其他线程
         ConfigExecutor.executeLongPolling(
                 new ClientLongPolling(asyncContext, clientMd5Map, ip, probeRequestSize, timeout, appName, tag));
     }

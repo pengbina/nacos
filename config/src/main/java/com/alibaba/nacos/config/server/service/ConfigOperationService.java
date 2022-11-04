@@ -44,6 +44,12 @@ import java.util.Map;
  *
  * @author dongyafei
  * @date 2022/8/11
+ *
+ * POST /v1/cs/configs负责发布配置，是服务端的核心接口。
+ * 基于MySQL数据源来看，这个接口总共做了几个事情：
+ * 更新数据库
+ * 集群中所有服务端更新本地配置
+ * 响应客户端长轮询
  */
 
 @Service

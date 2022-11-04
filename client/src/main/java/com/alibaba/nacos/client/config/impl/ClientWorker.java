@@ -91,6 +91,12 @@ import static com.alibaba.nacos.api.common.Constants.ENCODE;
  * Long polling.
  *
  * @author Nacos
+ *
+ * ClientWorker主要的任务就是执行长轮询。
+ *      groupKey：groupKey是为了确定一个ConfigService下唯一一个配置文件，groupKey=dataId+group{+namespace}。
+ *      cacheMap：存储groupKey和配置文件CacheData的映射关系。
+ *      agent：普通的HttpClient。
+ *
  */
 public class ClientWorker implements Closeable {
     
@@ -112,19 +118,20 @@ public class ClientWorker implements Closeable {
      * groupKey -> cacheData.
      */
     private final AtomicReference<Map<String, CacheData>> cacheMap = new AtomicReference<>(new HashMap<>());
-    
+
+    // 钩子管理器
     private final ConfigFilterChainManager configFilterChainManager;
-    
+    // nacos服务端是否健康
     private boolean isHealthServer = true;
     
     private String uuid = UUID.randomUUID().toString();
-    
+    // 长轮询超时时间 默认30秒
     private long timeout;
-    
+    // httpClient
     private ConfigTransportClient agent;
-    
+    // 长轮询发生异常，默认延迟2s进行下次长轮询
     private int taskPenaltyTime;
-    
+    //是否在添加监听器时，主动获取最新配置
     private boolean enableRemoteSyncConfig = false;
     
     private static final int MIN_THREAD_NUM = 2;
@@ -160,13 +167,18 @@ public class ClientWorker implements Closeable {
      * @param group     group of data
      * @param listeners listeners
      * @throws NacosException nacos exception
+     *
+     * NacosConfigService委托ClientWorker将监听器注册到CacheData中。
      */
     public void addTenantListeners(String dataId, String group, List<? extends Listener> listeners)
             throws NacosException {
         group = blank2defaultGroup(group);
         String tenant = agent.getTenant();
+        // 获取CacheData
+        // 如果当前groupKEy对应的CacheData不存在，将会创建，否则会直接返回对应CacheData
         CacheData cache = addCacheDataIfAbsent(dataId, group, tenant);
         synchronized (cache) {
+            // 给CacheData注册监听器
             for (Listener listener : listeners) {
                 cache.addListener(listener);
             }
@@ -348,6 +360,7 @@ public class ClientWorker implements Closeable {
      * @return cache data
      */
     public CacheData addCacheDataIfAbsent(String dataId, String group, String tenant) throws NacosException {
+        //1 如果缓存中已经存在，直接返回
         CacheData cache = getCache(dataId, group, tenant);
         if (null != cache) {
             return cache;
@@ -363,6 +376,7 @@ public class ClientWorker implements Closeable {
                 // reset so that server not hang this check
                 cache.setInitializing(true);
             } else {
+                //2 创建CacheData,这里会使用本地配置文件设置为初始配置
                 cache = new CacheData(configFilterChainManager, agent.getName(), dataId, group, tenant);
                 int taskId = cacheMap.get().size() / (int) ParamUtil.getPerTaskConfigSize();
                 cache.setTaskId(taskId);
@@ -412,11 +426,13 @@ public class ClientWorker implements Closeable {
     public ClientWorker(final ConfigFilterChainManager configFilterChainManager, ServerListManager serverListManager,
             final Properties properties) throws NacosException {
         this.configFilterChainManager = configFilterChainManager;
-        
+
+        // 初始化一些参数：如：timeout
         init(properties);
         
         agent = new ConfigRpcTransportClient(properties, serverListManager);
         int count = ThreadUtils.getSuitableThreadCount(THREAD_MULTIPLE);
+        // 单线程执行器
         ScheduledExecutorService executorService = Executors
                 .newScheduledThreadPool(Math.max(count, MIN_THREAD_NUM), r -> {
                     Thread t = new Thread(r);

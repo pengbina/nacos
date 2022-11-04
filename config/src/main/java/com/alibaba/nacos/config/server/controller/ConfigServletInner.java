@@ -133,6 +133,8 @@ public class ConfigServletInner {
     
     /**
      * Execute to get config [API V1] or [API V2].
+     *
+     * GET /v1/cs/configs接口负责配置查询
      */
     public String doGetConfig(HttpServletRequest request, HttpServletResponse response, String dataId, String group,
             String tenant, String tag, String isNotify, String clientIp, boolean isV2)
@@ -151,17 +153,20 @@ public class ConfigServletInner {
         String autoTag = request.getHeader("Vipserver-Tag");
         
         String requestIpApp = RequestUtil.getAppName(request);
+        // 尝试获取groupKey对应配置读锁
         int lockResult = tryConfigReadLock(groupKey);
         
         final String requestIp = RequestUtil.getRemoteIp(request);
         boolean isBeta = false;
         boolean isSli = false;
+        //获取锁成功
         if (lockResult > 0) {
             // LockResult > 0 means cacheItem is not null and other thread can`t delete this cacheItem
             FileInputStream fis = null;
             try {
                 String md5 = Constants.NULL;
                 long lastModified = 0L;
+                // 从内存中获取配置信息，用于确定content_type
                 CacheItem cacheItem = ConfigCacheService.getContentCache(groupKey);
                 if (cacheItem.isBeta() && cacheItem.getIps4Beta().contains(clientIp)) {
                     isBeta = true;
@@ -169,6 +174,7 @@ public class ConfigServletInner {
                 
                 final String configType =
                         (null != cacheItem.getType()) ? cacheItem.getType() : FileTypeEnum.TEXT.getFileType();
+                // 根据配置文件类型，决定返回的报文的content_type
                 response.setHeader("Config-Type", configType);
                 FileTypeEnum fileTypeEnum = FileTypeEnum.getFileTypeEnumByFileExtensionOrFileType(configType);
                 String contentTypeHeader = fileTypeEnum.getContentType();
@@ -209,10 +215,12 @@ public class ConfigServletInner {
                                     URLEncoder.encode(autoTag, StandardCharsets.UTF_8.displayName()));
                         } else {
                             md5 = cacheItem.getMd5();
+                            // 如果单击部署且使用derby数据源，查询实时配置
                             lastModified = cacheItem.getLastModifiedTs();
                             if (PropertyUtil.isDirectRead()) {
                                 configInfoBase = persistService.findConfigInfo(dataId, group, tenant);
                             } else {
+                                //如果集群部署或使用mysql,读取本地文件系统中的配置
                                 file = DiskUtil.targetFile(dataId, group, tenant);
                             }
                             if (configInfoBase == null && fileNotExist(file)) {

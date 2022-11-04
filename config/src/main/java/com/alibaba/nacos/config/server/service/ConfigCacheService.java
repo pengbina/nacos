@@ -50,6 +50,8 @@ import static com.alibaba.nacos.config.server.utils.LogUtil.DEFAULT_LOG;
  * Config service.
  *
  * @author Nacos
+ *
+ * ConfigCacheService一个重要的服务，负责管理所有内存配置CacheItem.
  */
 public class ConfigCacheService {
     
@@ -67,7 +69,8 @@ public class ConfigCacheService {
      * groupKey -> cacheItem.
      */
     private static final ConcurrentHashMap<String, CacheItem> CACHE = new ConcurrentHashMap<>();
-    
+
+    //持久层服务(Derby或MySQL)
     @Autowired
     private static PersistService persistService;
     
@@ -500,6 +503,8 @@ public class ConfigCacheService {
      * @param groupKey       groupKey string value.
      * @param md5            md5 string value.
      * @param lastModifiedTs lastModifiedTs long value.
+     *
+     * 更新配置的md5
      */
     public static void updateMd5(String groupKey, String md5, long lastModifiedTs, String encryptedDataKey) {
         CacheItem cache = makeSure(groupKey, encryptedDataKey, false);
@@ -627,6 +632,8 @@ public class ConfigCacheService {
      *
      * @param groupKey groupKey string value.
      * @return CacheItem.
+     *
+     * 获取缓存配置
      */
     public static CacheItem getContentCache(String groupKey) {
         return CACHE.get(groupKey);
@@ -654,7 +661,7 @@ public class ConfigCacheService {
         String serverMd5 = ConfigCacheService.getContentMd5(groupKey);
         return StringUtils.equals(md5, serverMd5);
     }
-    
+    // 比较入参md5与缓存md5是否一致
     public static boolean isUptodate(String groupKey, String md5, String ip, String tag) {
         String serverMd5 = ConfigCacheService.getContentMd5(groupKey, ip, tag);
         return StringUtils.equals(md5, serverMd5);
@@ -666,6 +673,8 @@ public class ConfigCacheService {
      *
      * @param groupKey groupKey string value.
      * @return 0 - No data and failed. Positive number - lock succeeded. Negative number - lock failed。
+     *
+     * 获取配置读锁
      */
     public static int tryReadLock(String groupKey) {
         CacheItem groupItem = CACHE.get(groupKey);
@@ -680,6 +689,8 @@ public class ConfigCacheService {
      * Release readLock.
      *
      * @param groupKey groupKey string value.
+     *
+     * 释放配置读锁
      */
     public static void releaseReadLock(String groupKey) {
         CacheItem item = CACHE.get(groupKey);
@@ -710,7 +721,14 @@ public class ConfigCacheService {
             groupItem.rwLock.releaseWriteLock();
         }
     }
-    
+
+    /**
+     * 创建配置
+     * @param groupKey
+     * @param encryptedDataKey
+     * @param isBeta
+     * @return
+     */
     static CacheItem makeSure(final String groupKey, String encryptedDataKey, boolean isBeta) {
         CacheItem item = CACHE.get(groupKey);
         if (null != item) {

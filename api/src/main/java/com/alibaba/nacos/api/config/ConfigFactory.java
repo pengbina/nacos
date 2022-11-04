@@ -40,6 +40,12 @@ public class ConfigFactory {
         try {
             Class<?> driverImplClass = Class.forName("com.alibaba.nacos.client.config.NacosConfigService");
             Constructor constructor = driverImplClass.getConstructor(Properties.class);
+            /**
+             * 为什么通过反射创建NacosConfigService实现类？主要是为了将api层单独拆分出来。
+             * configService主要功能包括：
+             * 配置增删改查
+             * 配置监听注册
+             */
             ConfigService vendorImpl = (ConfigService) constructor.newInstance(properties);
             return vendorImpl;
         } catch (Throwable e) {

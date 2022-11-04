@@ -66,7 +66,22 @@ public class LocalConfigInfoProcessor {
                         + File.separator + "config";
         LOGGER.info("LOCAL_SNAPSHOT_PATH:{}", LOCAL_SNAPSHOT_PATH);
     }
-    
+
+    /**
+     * failover文件在Nacos里是优先级最高的，如果failover文件存在则不会使用nacos服务端的配置，永远会使用failover文件，即使服务端的配置发生了变化，
+     * 类似于Apollo中-Denv=LOCAL时只会使用本地配置文件。需要注意的是，Nacos的failover文件内容没有更新的入口，也就是说这个文件只能在文件系统中修改生效，
+     * 生效时机在长轮询过程中。
+     * failover文件的路径是，这里agentName拼接逻辑比较复杂就不看了：
+     * 默认namespace:/{user.home}/{agentName}_nacos/data/config-data/{group}/{dataId}
+     * 指定namespace:/{user.home}/{agentName}_nacos/config-data-tenant/{namespace}/{group}/{dataId}
+     *
+     *
+     * @param serverName
+     * @param dataId
+     * @param group
+     * @param tenant
+     * @return
+     */
     public static String getFailover(String serverName, String dataId, String group, String tenant) {
         File localPath = getFailoverFile(serverName, dataId, group, tenant);
         if (!localPath.exists() || !localPath.isFile()) {

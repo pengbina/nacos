@@ -65,9 +65,13 @@ public class ConfigChangeHandler {
      * @param type       data type
      * @return change data map
      * @throws IOException io exception
+     *
+     * AbstractConfigChangeListener监听是有前提条件的，配置文件必须是yaml格式或properties格式，否则将不会触发Listener逻辑。
+     * 如果找不到解析器，会返回一个空的map
      */
     public Map<String, ConfigChangeItem> parseChangeData(String oldContent, String newContent, String type) throws IOException {
         for (ConfigChangeParser changeParser : this.parserList) {
+            // 判断是否有可以解析这种配置文件类型，目前仅支持properties和yaml
             if (changeParser.isResponsibleFor(type)) {
                 return changeParser.doParse(oldContent, newContent, type);
             }

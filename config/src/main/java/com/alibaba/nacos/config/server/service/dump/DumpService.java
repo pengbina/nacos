@@ -74,6 +74,18 @@ import static com.alibaba.nacos.config.server.utils.LogUtil.FATAL_LOG;
  * Dump data service.
  *
  * @author Nacos
+ *
+ * Nacos刚启动时，内存中与文件系统中未必存在所有配置，所以DumpService会全量dump配置到文件系统与内存中。
+ * 另外当数据库配置发生变化时，也会dump到本地文件系统。
+ *
+ * 配置文件主要存储在config_info表中。Nacos有三个配置项与数据源的选择有关：
+ * application.properties中的spring.datasource.platform配置项，默认为空，可以配置为mysql
+ * -Dnacos.standalone，true代表单机启动，false代表集群启动，默认false
+ * -DembeddedStorage，true代表使用嵌入式存储derby数据源，false代表不使用derby数据源，默认false
+ *
+ * 这块感觉比较乱，通过伪代码的方式理一下。
+ * 主要是spring.datasource.platform在默认为空的场景下，满足条件集群启动且-DembeddedStorage=false（默认false），
+ * 还是会选择mysql数据源。也就是说，集群启动，如果没特殊配置，Nacos会使用MySQL数据源。
  */
 @SuppressWarnings("PMD.AbstractClassShouldStartWithAbstractNamingRule")
 public abstract class DumpService {
@@ -163,7 +175,7 @@ public abstract class DumpService {
      * @throws Throwable throws Exception when actually operate.
      */
     protected abstract void init() throws Throwable;
-    
+    // 启动时DumpService全量dump
     protected void dumpOperate(DumpProcessor processor, DumpAllProcessor dumpAllProcessor,
             DumpAllBetaProcessor dumpAllBetaProcessor, DumpAllTagProcessor dumpAllTagProcessor) throws NacosException {
         String dumpFileContext = "CONFIG_DUMP_TO_FILE";
@@ -192,6 +204,7 @@ public abstract class DumpService {
             };
             
             try {
+                // 首次启动，dump数据库中所有配置到文件系统和内存中
                 dumpConfigInfo(dumpAllProcessor);
                 
                 // update Beta cache
@@ -225,6 +238,7 @@ public abstract class DumpService {
                         "Nacos Server did not start because dumpservice bean construction failure :\n" + e.getMessage(),
                         e);
             }
+            // 非单机部署，提交dump任务
             if (!EnvUtil.getStandaloneMode()) {
                 Runnable heartbeat = () -> {
                     String heartBeatTime = TimeUtils.getCurrentTime().toString();
@@ -240,12 +254,12 @@ public abstract class DumpService {
                 
                 long initialDelay = new Random().nextInt(INITIAL_DELAY_IN_MINUTE) + 10;
                 LogUtil.DEFAULT_LOG.warn("initialDelay:{}", initialDelay);
-                
+                // dump all config
                 ConfigExecutor.scheduleConfigTask(dumpAll, initialDelay, DUMP_ALL_INTERVAL_IN_MINUTE, TimeUnit.MINUTES);
-                
+                // dump beta config
                 ConfigExecutor
                         .scheduleConfigTask(dumpAllBeta, initialDelay, DUMP_ALL_INTERVAL_IN_MINUTE, TimeUnit.MINUTES);
-                
+                // dump tag config
                 ConfigExecutor
                         .scheduleConfigTask(dumpAllTag, initialDelay, DUMP_ALL_INTERVAL_IN_MINUTE, TimeUnit.MINUTES);
             }

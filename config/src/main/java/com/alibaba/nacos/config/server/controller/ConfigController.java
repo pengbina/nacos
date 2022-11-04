@@ -92,6 +92,8 @@ import java.util.stream.Collectors;
  * Special controller for soft load client to publish data.
  *
  * @author leiwen
+ *
+ * POST /v1/cs/configs/listener接口负责配置监听，是长轮询服务端的逻辑。
  */
 @RestController
 @RequestMapping(Constants.CONFIG_CONTROLLER_PATH)
@@ -313,7 +315,7 @@ public class ConfigController {
     @Secured(action = ActionTypes.READ, signType = SignType.CONFIG)
     public void listener(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
-        
+        // 设置request支持AsyncContext
         request.setAttribute("org.apache.catalina.ASYNC_SUPPORTED", true);
         String probeModify = request.getParameter("Listening-Configs");
         if (StringUtils.isBlank(probeModify)) {
@@ -322,7 +324,7 @@ public class ConfigController {
         }
         
         probeModify = URLDecoder.decode(probeModify, Constants.ENCODE);
-        
+        // 解析客户端业务报文为groupKey - 客户端当前配置md5
         Map<String, String> clientMd5Map;
         try {
             clientMd5Map = MD5Util.getClientMd5Map(probeModify);

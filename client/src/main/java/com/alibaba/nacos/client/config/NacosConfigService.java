@@ -45,6 +45,8 @@ import java.util.Properties;
  * Config Impl.
  *
  * @author Nacos
+ *
+ * 配置的增删改查，都是由NacosConfigService实现的，重点看配置查询
  */
 @SuppressWarnings("PMD.ServiceOrDaoClassShouldEndWithImplRule")
 public class NacosConfigService implements ConfigService {
@@ -150,8 +152,10 @@ public class NacosConfigService implements ConfigService {
     public void removeListener(String dataId, String group, Listener listener) {
         worker.removeTenantListener(dataId, group, listener);
     }
-    
+
+    //Nacos客户端获取配置的入口方法是NacosConfigService#getConfigInner.
     private String getConfigInner(String tenant, String dataId, String group, long timeoutMs) throws NacosException {
+        //group默认设置为DEFAULT_GROUP
         group = blank2defaultGroup(group);
         ParamUtils.checkKeyParam(dataId, group);
         ConfigResponse cr = new ConfigResponse();
@@ -165,6 +169,16 @@ public class NacosConfigService implements ConfigService {
         // but is maintained by user.
         // This is designed for certain scenario like client emergency reboot,
         // changing config needed in the same time, while nacos server is down.
+
+        // LEVEL1:使用本地文件系统的failover配置
+        // 一般情况下，failover文件不会存在，那么都会走ClientWorker.getServerConfig方法。
+        // 这个方法一方面是查询nacos服务端的最新配置，另一方面是更新snapshot文件。
+        // 如果ClientWorker.getServerConfig执行失败，且非403错误，会读取snapshot文件兜底。
+        // snapshot文件的路径：
+        //   默认namespace：/{user.home}/{agentName}_nacos/snapshot/{group}/{dataId}
+        //   指定namespace：/{user.home}/{agentName}_nacos/snapshot-tenant/{namespace}/{group}/{dataId}
+        // 综上所述，ConfigService获取配置，是不会走内存缓存的，要么是读取文件系统中的文件，要么是查询nacos-server的实时配置。
+
         String content = LocalConfigInfoProcessor.getFailover(worker.getAgentName(), dataId, group, tenant);
         if (content != null) {
             LOGGER.warn("[{}] [get-config] get failover ok, dataId={}, group={}, tenant={}, config={}",
@@ -177,7 +191,7 @@ public class NacosConfigService implements ConfigService {
             content = cr.getContent();
             return content;
         }
-        
+        //LEVEL2:读取config-server实时配置，并将snapshot保存到本地文件系统
         try {
             ConfigResponse response = worker.getServerConfig(dataId, group, tenant, timeoutMs, false);
             cr.setContent(response.getContent());
@@ -190,10 +204,12 @@ public class NacosConfigService implements ConfigService {
             if (NacosException.NO_RIGHT == ioe.getErrCode()) {
                 throw ioe;
             }
+            // 非403错误进入LEVEL3
             LOGGER.warn("[{}] [get-config] get from server error, dataId={}, group={}, tenant={}, msg={}",
                     worker.getAgentName(), dataId, group, tenant, ioe.toString());
         }
 
+        // LEVEL3: 如果读取config-server发生非403Forbidden错误，使用本地snapshot
         content = LocalConfigInfoProcessor.getSnapshot(worker.getAgentName(), dataId, group, tenant);
         if (content != null) {
             LOGGER.warn("[{}] [get-config] get snapshot ok, dataId={}, group={}, tenant={}, config={}",

@@ -32,7 +32,8 @@ public abstract class AbstractConfigChangeListener extends AbstractListener {
      * @param event config change event
      */
     public abstract void receiveConfigChange(final ConfigChangeEvent event);
-    
+
+    // 注意这里receiveConfigInfo是个空实现
     @Override
     public void receiveConfigInfo(final String configInfo) {
     }
